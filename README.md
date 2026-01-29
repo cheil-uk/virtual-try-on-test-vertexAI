@@ -10,7 +10,7 @@ This repo contains a tiny, rough working example that calls Google's Vertex AI V
 
 ## Quick start
 
-1. **Install deps**
+1. **Install deps (Python 3.9.6 compatible)**
 
 ```bash
 python -m venv .venv
@@ -50,11 +50,38 @@ python virtual_try_on_demo.py \
   --access-token "$(gcloud auth print-access-token)"
 ```
 
+You can override the model if your org uses a different Vertex AI Virtual Try-On model name:
+
+```bash
+python virtual_try_on_demo.py \
+  --project YOUR_GCP_PROJECT \
+  --location us-central1 \
+  --model virtual-try-on \
+  --person ./samples/person.jpg \
+  --garment ./samples/garment.jpg \
+  --output ./out/try_on.png \
+  --max-retries 3 \
+  --backoff-seconds 2
+```
+
 ## Notes
 
 - This is intentionally a **rough example** to validate the workflow.
 - The same flow can be wired to an in-store camera capture + large display to simulate an AR mirror.
 - Swap `MODEL_ID` in the script if your org uses a different model name.
+
+## Troubleshooting
+
+- **404 Not Found from the predict endpoint**
+  - Double-check that `--project` is your **Google Cloud project ID** (not the display name).
+  - Verify the model name your org has access to. If it differs from `virtual-try-on`, pass it with `--model`.
+
+- **429 Too Many Requests**
+  - Reduce request volume and retry; the script now supports `--max-retries` and `--backoff-seconds`.
+  - Check Vertex AI quotas in Google Cloud Console and request an increase if needed.
+
+- **LibreSSL / urllib3 warning**
+  - This warning is from your Python SSL build on macOS. It is safe to ignore for the demo.
 
 ## When to add a product catalog
 

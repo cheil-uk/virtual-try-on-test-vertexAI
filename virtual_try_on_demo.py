@@ -2,11 +2,13 @@ import argparse
 import base64
 import json
 import os
+import time
 from pathlib import Path
+from typing import Optional
 
 import requests
 
-MODEL_ID = "virtual-try-on"
+MODEL_ID = "virtual-try-on-001"
 
 def read_image_base64(path: Path) -> str:
     data = path.read_bytes()
@@ -17,17 +19,27 @@ def build_payload(person_b64: str, garment_b64: str) -> dict:
     return {
         "instances": [
             {
-                "person_image": {"bytesBase64Encoded": person_b64},
-                "garment_image": {"bytesBase64Encoded": garment_b64},
+                "personImage": {
+                    "image": {
+                        "bytesBase64Encoded": person_b64
+                    }
+                },
+                "productImages": [
+                    {
+                        "image": {
+                            "bytesBase64Encoded": garment_b64
+                        }
+                    }
+                ],
             }
         ],
         "parameters": {
-            "sample_count": 1,
+            "sampleCount": 1,
         },
     }
 
 
-def get_access_token(explicit_token: str | None) -> str:
+def get_access_token(explicit_token: Optional[str]) -> str:
     if explicit_token:
         return explicit_token
     token = os.environ.get("ACCESS_TOKEN")
@@ -41,23 +53,49 @@ def get_access_token(explicit_token: str | None) -> str:
 def call_virtual_try_on(
     project: str,
     location: str,
+    model: str,
     token: str,
     payload: dict,
+    max_retries: int,
+    backoff_seconds: float,
 ) -> dict:
-    endpoint = (
-        "https://{location}-aiplatform.googleapis.com/v1/projects/"
-        "{project}/locations/{location}/publishers/google/models/{model}:predict"
-    ).format(location=location, project=project, model=MODEL_ID)
+    # Publisher model predict endpoint (no project in path)
+    url = (
+      "https://{location}-aiplatform.googleapis.com/v1/projects/"
+      "{project}/locations/{location}/publishers/google/models/{model}:predict"
+    ).format(location=location, project=project, model=model)
+
+
+
 
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
 
-    response = requests.post(endpoint, headers=headers, data=json.dumps(payload))
-    response.raise_for_status()
-    return response.json()
+    last_exc: Exception | None = None
 
+    for attempt in range(max_retries + 1):
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=120)
+
+            if not response.ok:
+                print("STATUS:", response.status_code)
+                print("RESPONSE BODY:", response.text)
+
+            response.raise_for_status()
+            return response.json()
+
+        except requests.HTTPError as e:
+            last_exc = e
+            if attempt >= max_retries:
+                raise
+
+            sleep_for = backoff_seconds * (2 ** attempt)
+            time.sleep(sleep_for)
+
+    # Should never get here
+    raise SystemExit(f"Unexpected retry loop exit. Last error: {last_exc}")
 
 def save_output(response_json: dict, output_path: Path) -> None:
     predictions = response_json.get("predictions", [])
@@ -80,6 +118,9 @@ def main() -> None:
     parser.add_argument("--garment", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--access-token")
+    parser.add_argument("--model", default=MODEL_ID)
+    parser.add_argument("--max-retries", type=int, default=3)
+    parser.add_argument("--backoff-seconds", type=float, default=2.0)
 
     args = parser.parse_args()
 
@@ -96,7 +137,15 @@ def main() -> None:
         read_image_base64(person_path),
         read_image_base64(garment_path),
     )
-    response_json = call_virtual_try_on(args.project, args.location, token, payload)
+    response_json = call_virtual_try_on(
+        args.project,
+        args.location,
+        args.model,
+        token,
+        payload,
+        args.max_retries,
+        args.backoff_seconds,
+    )
     save_output(response_json, Path(args.output))
 
     print(f"Saved try-on image to {args.output}")

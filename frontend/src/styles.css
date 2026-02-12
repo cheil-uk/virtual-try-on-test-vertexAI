@@ -43,7 +43,9 @@ h2 {
   font-size: var(--heading-scale);
 }
 
-p {
+p,
+button,
+label {
   margin: 0;
   font-family: "Outfit", sans-serif;
 }
@@ -256,6 +258,45 @@ p {
   gap: 1rem;
 }
 
+.camera-preview {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 2px solid #e1efc6;
+  background: #f7fce9;
+  position: relative;
+  display: none;
+}
+
+.camera-preview.open {
+  display: block;
+}
+
+.preview-slot {
+  position: relative;
+  width: 100%;
+}
+
+.camera-preview video {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.camera-controls {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.hidden-canvas {
+  display: none;
+}
+
 .preview,
 .result img {
   width: 100%;
@@ -282,6 +323,17 @@ p {
   flex-wrap: wrap;
 }
 
+.camera-status {
+  font-size: 0.85rem;
+  color: #2f4114;
+}
+
+.upload-actions .button,
+.upload-actions button.button {
+  min-width: 220px;
+  justify-content: center;
+}
+
 .button,
 .primary,
 .secondary {
@@ -295,6 +347,14 @@ p {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  text-decoration: none;
+}
+
+.button:focus-visible,
+.primary:focus-visible,
+.secondary:focus-visible {
+  outline: 3px solid rgba(128, 186, 39, 0.6);
+  outline-offset: 4px;
 }
 
 .secondary .icon {

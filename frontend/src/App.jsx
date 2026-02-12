@@ -1,11 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // API base for the FastAPI backend (override with VITE_API_BASE)
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+// Optional API key guard:
+// If API_KEY is set in backend .env, you must also set VITE_API_KEY in frontend/.env
+// so requests include the correct x-api-key header.
+const API_KEY = import.meta.env.VITE_API_KEY;
 // Vertex regions are split: Try-On is only available in us-central1
 const TRYON_LOCATION = "us-central1";
 // Background generation can use Europe (Imagen availability permitting)
 const BACKGROUND_LOCATION = "europe-west2";
+// Explicit Imagen model ID for background generation (kept in sync with backend default)
+const IMAGEN_MODEL_ID = "imagen-4.0-ultra-generate-001";
 
 // Curated background prompts (luxury tone)
 const BACKGROUND_OPTIONS = [
@@ -60,6 +66,11 @@ export default function App() {
   const [garmentImage, setGarmentImage] = useState("");
   // User photo (data URL)
   const [personPhoto, setPersonPhoto] = useState("");
+  // Camera capture state
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraStatus, setCameraStatus] = useState("");
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
   // Background prompt used only for Imagen (not sent to Try-On)
   const [backgroundPrompt, setBackgroundPrompt] = useState("");
   const [backgroundImage, setBackgroundImage] = useState("");
@@ -92,6 +103,57 @@ export default function App() {
     setPersonPhoto(dataUrl);
   };
 
+  // Start device camera for capture
+  const startCamera = async () => {
+    setError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+        audio: false
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setIsCameraOpen(true);
+        setCameraStatus("Camera started");
+      }
+    } catch (err) {
+      setCameraStatus("Camera permission denied or unavailable.");
+      setError("Unable to access camera. Please allow camera permissions.");
+    }
+  };
+
+  // Stop device camera
+  const stopCamera = () => {
+    if (videoRef.current?.srcObject) {
+      const tracks = videoRef.current.srcObject.getTracks();
+      tracks.forEach((track) => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraOpen(false);
+    setCameraStatus("Camera closed");
+  };
+
+  // Capture a frame from the live video
+  const capturePhoto = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+
+    const width = video.videoWidth || 1024;
+    const height = video.videoHeight || 768;
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, width, height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    setPersonPhoto(dataUrl);
+    stopCamera();
+    setCameraStatus("Photo captured");
+  };
+
   // Load selected garment image into base64 for API use
   useEffect(() => {
     const loadGarmentImage = async () => {
@@ -120,7 +182,10 @@ export default function App() {
       const bgDataUrl = await ensureBackgroundImage();
       const response = await fetch(`${API_BASE}/try-on`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(API_KEY ? { "x-api-key": API_KEY } : {})
+        },
         body: JSON.stringify({
           project: "project-a250af6f-f898-4bf6-872",
           location: TRYON_LOCATION,
@@ -161,10 +226,14 @@ export default function App() {
 
     const response = await fetch(`${API_BASE}/background`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(API_KEY ? { "x-api-key": API_KEY } : {})
+      },
       body: JSON.stringify({
         project: "project-a250af6f-f898-4bf6-872",
         location: BACKGROUND_LOCATION,
+        model: IMAGEN_MODEL_ID,
         prompt: backgroundPrompt
       })
     });
@@ -295,11 +364,46 @@ export default function App() {
                     </button>
                   </div>
                 ) : (
-                  <div className="placeholder">No photo yet</div>
+                  <div className="preview-slot">
+                    <div className={`camera-preview ${isCameraOpen ? "open" : ""}`}>
+                      <video ref={videoRef} playsInline muted />
+                      {isCameraOpen && (
+                        <div className="camera-controls">
+                          <button
+                            type="button"
+                            className="primary"
+                            onClick={capturePhoto}
+                          >
+                            Capture Photo
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={stopCamera}
+                          >
+                            Close Camera
+                          </button>
+                        </div>
+                      )}
+                      <canvas ref={canvasRef} className="hidden-canvas" />
+                    </div>
+                    {!isCameraOpen && (
+                      <div className="placeholder">No photo yet</div>
+                    )}
+                  </div>
                 )}
                 <div className="upload-actions">
+                  {!isCameraOpen && (
+                    <button
+                      type="button"
+                      className="button"
+                      onClick={startCamera}
+                    >
+                      Open Camera
+                    </button>
+                  )}
                   <label className="button">
-                    Take / Upload Photo
+                    Upload Photo
                     <input
                       type="file"
                       accept="image/*"
@@ -316,7 +420,11 @@ export default function App() {
                       Retake
                     </button>
                   )}
+                  {cameraStatus && (
+                    <span className="camera-status">{cameraStatus}</span>
+                  )}
                 </div>
+                {/* camera preview now lives in the main preview slot */}
               </div>
               <div className="background-inline">
                 <p className="muted">Optional background</p>

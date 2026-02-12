@@ -228,7 +228,7 @@ def composite_on_background(
 
 
 # Build the Vertex Virtual Try-On payload
-def build_payload(person_b64: str, garment_b64: str, background_prompt: Optional[str]) -> dict:
+def build_payload(person_b64: str, garment_b64: str) -> dict:
     # Construct the payload expected by the Virtual Try-On model
     payload = {
         "instances": [
@@ -276,7 +276,7 @@ def try_on(request: TryOnRequest) -> TryOnResponse:
     person_b64 = resize_and_encode(request.personImageBase64)
     garment_b64 = resize_and_encode(request.garmentImageBase64)
 
-    payload = build_payload(person_b64, garment_b64, None)
+    payload = build_payload(person_b64, garment_b64)
     response_json = call_vertex(
         project=request.project,
         location=request.location,

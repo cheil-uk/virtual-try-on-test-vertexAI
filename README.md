@@ -2,6 +2,12 @@
 
 This repo contains a prototype that calls Google's Vertex AI Virtual Try-On API to generate a preview image of a person wearing a garment.
 
+## Virtual try on docs
+https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/imagen/virtual-try-on-001
+
+## Imagen docs
+https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/imagen/4-0-generate
+
 ## What this does
 
 - Takes a **person photo** and a **garment photo**.
@@ -59,15 +65,17 @@ Create your local env files from the examples:
 
 Keep both the backend and frontend running at the same time for the demo to work.
 
-Background prompt preview (Imagen):
+Background prompts (Imagen):
 
-- Step 3 lets you generate a background image via Imagen using a text prompt.
+- The background prompt is selected on the Photo step and sent to Imagen when you
+  click **Generate Try-On**.
 - The generated background is sent back with the try-on request and composited server-side.
   The server also removes the original background from the try-on output (using `rembg`)
   before compositing, so the new background shows cleanly.
   `rembg` requires `onnxruntime`, which is included in `requirements.txt`.
 - The default Imagen model is the highest-quality GA option: `imagen-4.0-ultra-generate-001`.
-  You can override it with `IMAGEN_MODEL_ID` if needed.
+  You can override it with `IMAGEN_MODEL_ID` if needed. The frontend also sends the model
+  explicitly; keep it in sync with the backend default.
 - Try-on requests are sent to `us-central1` (model availability) while background generation
   can use `europe-west2`. This split is hard-coded in `frontend/src/App.jsx`.
 
@@ -132,10 +140,18 @@ python virtual_try_on_demo.py \
 ## Security
 
 - **Never commit secrets.** Keep `.env` files local and use `.env.example` as a template.
+- **Access tokens ≠ API keys.** Access tokens are short-lived; API keys are long-lived.
   In production, use service accounts or workload identity (no manual tokens).
-- **Images are in-memory only.** The backend does not persist user images; avoid logging raw bytes.
+- **Image security depends on backend + project settings.** Data handling is determined by where
+  the backend runs, whether you persist images, and your Google Cloud project IAM/logging settings.
+- **This demo keeps images in-memory only.** The backend does not persist user images; avoid logging raw bytes.
 - **Frontend should not hold secrets.** The React app must only call the backend.
-- **AWS hosting:** use HTTPS, restrict CORS, and add rate limiting at the edge.
+- **Optional API key guard:** set `API_KEY` in `.env` and send it as `x-api-key` from clients.
+- **Rate limiting:** add edge throttling (CloudFront/ALB/WAF) or a server-side limiter.
+- **Signed URLs for storage:** if you ever persist images, store them in private buckets and use
+  short-lived signed URLs (never public buckets).
+- **Manual deletion:** this demo clears UI state on “Start over” and “Clear gallery.”
+  If you store images in production, provide a deletion endpoint and retention policy.
 
 ## Troubleshooting
 
@@ -156,4 +172,3 @@ python virtual_try_on_demo.py \
 
 - **"Invalid number of product images. Expected 1, got 2."**
   - The `virtual-try-on-001` model currently accepts **exactly one** garment image per request.
-

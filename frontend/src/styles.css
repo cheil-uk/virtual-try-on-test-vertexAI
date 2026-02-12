@@ -91,6 +91,13 @@ p {
   color: #80ba27;
 }
 
+.privacy-note {
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+  color: #2f4114;
+  max-width: 520px;
+}
+
 .progress-bar {
   display: flex;
   gap: 1.5vw;
@@ -379,6 +386,10 @@ p {
   border-radius: 20px;
   padding: 1.2rem 1.5rem;
   border: 2px solid #e1efc6;
+}
+
+.gallery-actions {
+  margin-left: auto;
 }
 
 .gallery-strip {

@@ -1,2 +1,23 @@
+# Google auth (ADC token refresh)
+google-auth
+
+# FastAPI backend framework
+fastapi
+
+# Image processing utilities
+Pillow>=9.1.0
+
+# Background removal
+rembg
+
+# Inference runtime required by rembg
+onnxruntime
+
+# Request/response validation models
+pydantic
+
+# HTTP client for Vertex API calls
 requests
-streamlit
+
+# ASGI server for FastAPI
+uvicorn

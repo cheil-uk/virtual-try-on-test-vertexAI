@@ -60,7 +60,7 @@ export default function App() {
   const [garmentImage, setGarmentImage] = useState("");
   // User photo (data URL)
   const [personPhoto, setPersonPhoto] = useState("");
-  // Background prompt and cached generated background (data URL)
+  // Background prompt used only for Imagen (not sent to Try-On)
   const [backgroundPrompt, setBackgroundPrompt] = useState("");
   const [backgroundImage, setBackgroundImage] = useState("");
   // Loading + results
@@ -127,7 +127,6 @@ export default function App() {
           model: "virtual-try-on-001",
           personImageBase64: base64FromDataUrl(personPhoto),
           garmentImageBase64: base64FromDataUrl(garmentImage),
-          backgroundPrompt: backgroundPrompt || null,
           backgroundImageBase64: bgDataUrl
             ? base64FromDataUrl(bgDataUrl)
             : null
@@ -200,6 +199,9 @@ export default function App() {
         <div>
           <p className="eyebrow">Virtual Try-On</p>
           <h1>Mirror Demo</h1>
+          <p className="privacy-note">
+            Images are processed in-memory for this demo and are not stored.
+          </p>
         </div>
         <div className="step-indicator">
           <span className="step-count">
@@ -388,6 +390,16 @@ export default function App() {
                 <div>
                   <h3>Gallery</h3>
                   <p className="muted">Session only. Images are not stored.</p>
+                </div>
+                <div className="gallery-actions">
+                  <button
+                    className="secondary"
+                    type="button"
+                    onClick={() => setGallery([])}
+                    disabled={gallery.length === 0}
+                  >
+                    Clear gallery
+                  </button>
                 </div>
                 <div className="gallery-strip">
                   {gallery.length === 0 && (

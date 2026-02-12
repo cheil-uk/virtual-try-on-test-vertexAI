@@ -12,7 +12,6 @@ from PIL import Image, ImageFilter, ImageOps, ImageEnhance, ImageDraw
 from rembg import remove, new_session
 
 # Pillow resampling enum changed across versions; normalize to a single name.
-# Pillow resampling enum changed across versions; normalize to a single name.
 Resampling: Any
 try:
     from PIL.Image import Resampling as _Resampling
@@ -23,11 +22,11 @@ except Exception:
 
     Resampling = _ResamplingFallback
 import requests
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request as FastAPIRequest
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-# Default models + basic image sizing guard
 # Default models + basic image sizing guard
 MODEL_ID = "virtual-try-on-001"
 IMAGEN_MODEL_ID = os.environ.get("IMAGEN_MODEL_ID", "imagen-4.0-ultra-generate-001")
@@ -44,7 +43,6 @@ class TryOnRequest(BaseModel):
     personImageBase64: str
     garmentImageBase64: str
     # Optional background controls
-    backgroundPrompt: Optional[str] = None
     backgroundImageBase64: Optional[str] = None
 
 
@@ -78,6 +76,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Optional lightweight API key guard (disabled unless API_KEY is set)
+API_KEY = os.environ.get("API_KEY")
+
+
+@app.middleware("http")
+async def api_key_guard(request: FastAPIRequest, call_next):
+    if API_KEY:
+        provided = request.headers.get("x-api-key")
+        if provided != API_KEY:
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
 
 
 # Resolve an OAuth token (ADC preferred, env var fallback)
@@ -230,10 +240,6 @@ def build_payload(person_b64: str, garment_b64: str, background_prompt: Optional
         "parameters": {"sampleCount": 1},
     }
 
-    # Virtual Try-On does not currently use prompt, but kept for completeness
-    if background_prompt:
-        payload["parameters"]["backgroundPrompt"] = background_prompt
-
     return payload
 
 
@@ -266,11 +272,11 @@ def try_on(request: TryOnRequest) -> TryOnResponse:
     # Main try-on flow: normalize inputs, call Vertex, composite if needed
     token = resolve_token()
 
-    # Normalize inputs so we don't exceed response size limits
+    # Normalise inputs so we don't exceed response size limits
     person_b64 = resize_and_encode(request.personImageBase64)
     garment_b64 = resize_and_encode(request.garmentImageBase64)
 
-    payload = build_payload(person_b64, garment_b64, request.backgroundPrompt)
+    payload = build_payload(person_b64, garment_b64, None)
     response_json = call_vertex(
         project=request.project,
         location=request.location,

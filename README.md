@@ -1,12 +1,13 @@
 # Virtual Try-On Prototype (Vertex AI)
 
-This repo contains a tiny, rough working example that calls Google's Vertex AI Virtual Try-On API to generate a preview image of a person wearing a garment. The goal is to **vibe-code** a minimal flow that could power an in-store AR mirror experience (capture → generate → display).
+This repo contains a prototype that calls Google's Vertex AI Virtual Try-On API to generate a preview image of a person wearing a garment.
 
 ## What this does
 
 - Takes a **person photo** and a **garment photo**.
 - Sends both to the Vertex AI Virtual Try-On endpoint.
-- Saves the generated image to disk (for display on a kiosk / mirror screen).
+- Saves the generated image to local disk (for display on a kiosk / mirror screen).
+- The backend uses direct REST calls to Vertex AI (no SDK required).
 
 ## Quick start
 
@@ -20,14 +21,69 @@ pip install -r requirements.txt
 
 2. **Authenticate**
 
-You can use `gcloud` to grab an access token:
+Use Application Default Credentials (ADC) so tokens auto-refresh:
 
 ```bash
 gcloud auth application-default login
-gcloud auth print-access-token
 ```
 
-3. **Run the demo**
+3. **Run the API + React demo (kiosk-style)**
+
+First-time checklist:
+
+- `python -m venv .venv`
+- `source .venv/bin/activate`
+- `pip install -r requirements.txt`
+- `gcloud auth application-default login`
+
+Backend (FastAPI):
+
+```bash
+uvicorn api_app:app --reload --port 8000
+```
+
+Frontend (Vite):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The React app uses `frontend/.env` to point at the backend (`VITE_API_BASE=http://localhost:8000`).
+You can override this by setting `VITE_API_BASE` in your environment.
+Create your local env files from the examples:
+
+- `cp .env.example .env`
+- `cp frontend/.env.example frontend/.env`
+
+Keep both the backend and frontend running at the same time for the demo to work.
+
+Background prompt preview (Imagen):
+
+- Step 3 lets you generate a background image via Imagen using a text prompt.
+- The generated background is sent back with the try-on request and composited server-side.
+  The server also removes the original background from the try-on output (using `rembg`)
+  before compositing, so the new background shows cleanly.
+  `rembg` requires `onnxruntime`, which is included in `requirements.txt`.
+- The default Imagen model is the highest-quality GA option: `imagen-4.0-ultra-generate-001`.
+  You can override it with `IMAGEN_MODEL_ID` if needed.
+- Try-on requests are sent to `us-central1` (model availability) while background generation
+  can use `europe-west2`. This split is hard-coded in `frontend/src/App.jsx`.
+
+4. **Run the CLI demo (optional)**
+
+This script is a simple, local sanity check. It makes a single REST call to the
+Vertex Virtual Try-On model and writes the result to `./out/`.
+
+First-time checklist:
+
+- `python -m venv .venv`
+- `source .venv/bin/activate`
+- `pip install -r requirements.txt`
+- `gcloud auth application-default login`
+
+Basic example:
 
 ```bash
 python virtual_try_on_demo.py \
@@ -38,7 +94,7 @@ python virtual_try_on_demo.py \
   --output ./out/try_on.png
 ```
 
-You can also pass an access token explicitly:
+If you prefer, you can pass an access token explicitly:
 
 ```bash
 python virtual_try_on_demo.py \
@@ -47,16 +103,16 @@ python virtual_try_on_demo.py \
   --person ./samples/person.jpg \
   --garment ./samples/garment.jpg \
   --output ./out/try_on.png \
-  --access-token "$(gcloud auth print-access-token)"
+  --access-token "$(gcloud auth application-default print-access-token)"
 ```
 
-You can override the model if your org uses a different Vertex AI Virtual Try-On model name:
+Override the model if your org uses a different Virtual Try-On model name:
 
 ```bash
 python virtual_try_on_demo.py \
   --project YOUR_GCP_PROJECT \
   --location us-central1 \
-  --model virtual-try-on \
+  --model virtual-try-on-001 \
   --person ./samples/person.jpg \
   --garment ./samples/garment.jpg \
   --output ./out/try_on.png \
@@ -69,6 +125,17 @@ python virtual_try_on_demo.py \
 - This is intentionally a **rough example** to validate the workflow.
 - The same flow can be wired to an in-store camera capture + large display to simulate an AR mirror.
 - Swap `MODEL_ID` in the script if your org uses a different model name.
+- **Production auth:** do not use manually copied access tokens. Run the backend with a
+  service account (or workload identity) so credentials are provided by the runtime and
+  tokens are refreshed automatically.
+
+## Security
+
+- **Never commit secrets.** Keep `.env` files local and use `.env.example` as a template.
+  In production, use service accounts or workload identity (no manual tokens).
+- **Images are in-memory only.** The backend does not persist user images; avoid logging raw bytes.
+- **Frontend should not hold secrets.** The React app must only call the backend.
+- **AWS hosting:** use HTTPS, restrict CORS, and add rate limiting at the edge.
 
 ## Troubleshooting
 
@@ -83,13 +150,10 @@ python virtual_try_on_demo.py \
 - **LibreSSL / urllib3 warning**
   - This warning is from your Python SSL build on macOS. It is safe to ignore for the demo.
 
-## When to add a product catalog
+- **"Response exceeded max allowed size"**
+  - Very large input images can produce responses over the 40 MB limit. The app auto-resizes inputs
+    to a max dimension and encodes them as JPEG before sending to Vertex AI.
 
-Start by validating that **one person image + one garment image** can successfully return a try-on render. Once that API round-trip works reliably, layer in a catalog service so you can pick garments by ID and map them to image assets (or URLs). This avoids debugging catalog plumbing while the core model call is still unproven.
+- **"Invalid number of product images. Expected 1, got 2."**
+  - The `virtual-try-on-001` model currently accepts **exactly one** garment image per request.
 
-If you want to stub this now, there's a small mock catalog you can adapt (`samples_catalog.json`) that mirrors the structure you shared and adds a single field (`garmentImagePath`) you can map to the `--garment` input for the demo script. You can then build a thin UI/API layer (Node + Express or similar) that:
-
-1. Lists products from the catalog (or client API).
-2. Lets a user pick an item.
-3. Resolves the selected item to a garment image path/URL.
-4. Calls the Python try-on script or a small wrapper service.

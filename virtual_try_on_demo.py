@@ -73,7 +73,7 @@ def call_virtual_try_on(
         "Content-Type": "application/json",
     }
 
-    last_exc: Exception | None = None
+    last_exc: Optional[Exception] = None
 
     for attempt in range(max_retries + 1):
         try:
